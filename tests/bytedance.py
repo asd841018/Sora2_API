@@ -1,14 +1,18 @@
 import os
 import time  
 from byteplussdkarkruntime import Ark
+import dotenv
+
+
+dotenv.load_dotenv()
 
 # Make sure that you have stored the API Key in the environment variable ARK_API_KEY
 # Initialize the Ark client to read your API Key from an environment variable
 client = Ark(
     # This is the default path. You can configure it based on the service location
-    base_url="",
+    base_url="https://ark.ap-southeast.bytepluses.com/api/v3",
     # Get your Key authentication from the environment variable. This is the default mode and you can modify it as required
-    api_key="",
+    api_key=os.getenv("ARK_API_KEY"),
 )
 
 if __name__ == "__main__":

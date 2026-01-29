@@ -1,8 +1,8 @@
 import os
 import time  
 import logging
-from typing import Optional, Dict, Any
-from byteplussdkarkruntime import Ark
+from typing import Optional, Dict, Any, List
+import httpx
 
 from app.config import settings
 
@@ -33,34 +33,27 @@ class VideoGenerationError(VideoGenError):
 class VideoGenService:
     def __init__(self):
         try:
-            self.client = Ark(
-                base_url="https://ark.ap-southeast.bytepluses.com/api/v3",
-                api_key=settings.BYTEDANCE_ARK_API_KEY
-            )
+            self.base_url = "https://ark.ap-southeast.bytepluses.com/api/v3"
+            self.api_key = settings.BYTEDANCE_ARK_API_KEY
             self.model_id = settings.BYTEDANCE_MODEL_ID
             logger.info("VideoGenService initialized successfully")
         except Exception as e:
             logger.error(f"VideoGenService initialization failed: {str(e)}")
             raise APIConnectionError(f"Failed to initialize ByteDance Ark client: {str(e)}")
         
-    def create_video(
+    async def create_video_task(
         self, 
-        text_prompt: str, 
-        image_url: Optional[str] = None, 
-        duration: int = 12, 
-        generate_audio: bool = False
+        content: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """
         Create video generation task
         
         Args:
-            text_prompt: Text prompt for video generation
-            image_url: Optional image URL for image-to-video
-            duration: Video duration in seconds
-            generate_audio: Whether to generate audio
+            model: Model ID
+            content: Content array with text and optional image
             
         Returns:
-            Creation result
+            Task creation result with task ID
             
         Raises:
             InvalidParameterError: Parameter validation failed
@@ -69,80 +62,111 @@ class VideoGenService:
         """
         # Parameter validation
         try:
-            self._validate_parameters(text_prompt, image_url, duration)
+            self._validate_parameters(content)
         except ValueError as e:
-            logger.error(f"參數驗證失敗: {str(e)}")
+            logger.error(f"Parameter validation failed: {str(e)}")
             raise InvalidParameterError(str(e))
         
-        # Build request content
+        # Call API to create task
         try:
-            content = self._build_content(text_prompt, image_url)
-        except Exception as e:
-            logger.error(f"Failed to build request content: {str(e)}")
-            raise InvalidParameterError(f"Failed to build request content: {str(e)}")
-        
-        # Call API to generate video
-        try:
-            logger.info(f"Starting video task creation - prompt: {text_prompt[:50]}..., duration: {duration}s")
+            logger.info(f"Starting video task creation - model: {self.model_id}")
             
-            create_result = self.client.content_generation.tasks.create(
-                model=self.model_id,
-                content=content,
-                duration=duration,
-                generate_audio=generate_audio
-            )
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/contents/generations/tasks",
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {self.api_key}"
+                    },
+                    json={
+                        "model": self.model_id,
+                        "content": content
+                    }
+                )
+                
+                response.raise_for_status()
+                result = response.json()
+                
+            logger.info(f"Video task created successfully - task_id: {result.get('id', 'unknown')}")
+            return result
             
-            logger.info(f"Video task created successfully - task_id: {getattr(create_result, 'id', 'unknown')}")
-            return create_result
+        except httpx.HTTPStatusError as e:
+            logger.error(f"API request failed with status {e.response.status_code}: {e.response.text}")
+            raise APIConnectionError(f"API request failed: {e.response.text}")
             
-        except ConnectionError as e:
-            logger.error(f"API connection failed: {str(e)}")
-            raise APIConnectionError(f"Failed to connect to ByteDance Ark API: {str(e)}")
-            
-        except TimeoutError as e:
+        except httpx.TimeoutException as e:
             logger.error(f"API request timeout: {str(e)}")
             raise APIConnectionError(f"API request timeout, please try again later: {str(e)}")
             
         except Exception as e:
-            logger.error(f"Video generation failed: {str(e)}")
-            raise VideoGenerationError(f"Error occurred during video generation: {str(e)}")
+            logger.error(f"Video task creation failed: {str(e)}")
+            raise VideoGenerationError(f"Error occurred during video task creation: {str(e)}")
     
-    def _validate_parameters(
-        self, 
-        text_prompt: str, 
-        image_url: Optional[str], 
-        duration: int
-    ) -> None:
-        """Validate input parameters"""
-        if not text_prompt or not text_prompt.strip():
-            raise ValueError("text_prompt cannot be empty")
+    async def query_task(self, task_id: str) -> Dict[str, Any]:
+        """
+        Query video generation task status
         
-        if len(text_prompt) > 2000:
-            raise ValueError(f"text_prompt length cannot exceed 2000 characters, current length: {len(text_prompt)}")
-        
-        if duration not in [4, 8, 12]:
-            raise ValueError(f"duration must be 4, 8, or 12 seconds, current value: {duration}")
-        
-        if image_url and not (image_url.startswith('http://') or image_url.startswith('https://')):
-            raise ValueError(f"image_url must be a valid HTTP/HTTPS URL: {image_url}")
-    
-    def _build_content(self, text_prompt: str, image_url: Optional[str]) -> list:
-        """Build request content"""
-        content = [
-            {
-                "type": "text",
-                "text": text_prompt
-            }
-        ]
-        
-        if image_url:
-            content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": image_url
+        Args:
+            task_id: Task ID
+            
+        Returns:
+            Task status and result
+            
+        Raises:
+            APIConnectionError: API connection failed
+            VideoGenerationError: Query failed
+        """
+        try:
+            logger.info(f"Querying task status - task_id: {task_id}")
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    f"{self.base_url}/contents/generations/tasks/{task_id}",
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {self.api_key}"
                     }
-                }
-            )
+                )
+                
+                response.raise_for_status()
+                result = response.json()
+                
+            logger.info(f"Task query successful - task_id: {task_id}, status: {result.get('status', 'unknown')}")
+            return result
+            
+        except httpx.HTTPStatusError as e:
+            logger.error(f"API request failed with status {e.response.status_code}: {e.response.text}")
+            raise APIConnectionError(f"API request failed: {e.response.text}")
+            
+        except httpx.TimeoutException as e:
+            logger.error(f"API request timeout: {str(e)}")
+            raise APIConnectionError(f"API request timeout, please try again later: {str(e)}")
+            
+        except Exception as e:
+            logger.error(f"Task query failed: {str(e)}")
+            raise VideoGenerationError(f"Error occurred during task query: {str(e)}")
+    
+    def _validate_parameters(self, content: List[Dict[str, Any]]) -> None:
+        """Validate input parameters"""
+        if not content or len(content) == 0:
+            raise ValueError("content cannot be empty")
         
-        return content
+        # Check if there's at least one text content
+        has_text = any(item.get("type") == "text" for item in content)
+        if not has_text:
+            raise ValueError("content must contain at least one text item")
+        
+        # Validate each content item
+        for item in content:
+            if item.get("type") == "text":
+                text = item.get("text", "")
+                if not text or not text.strip():
+                    raise ValueError("text content cannot be empty")
+                if len(text) > 2000:
+                    raise ValueError(f"text length cannot exceed 2000 characters, current length: {len(text)}")
+            
+            elif item.get("type") == "image_url":
+                image_url = item.get("image_url", {}).get("url", "")
+                if image_url:
+                    if not (image_url.startswith('http://') or image_url.startswith('https://')):
+                        raise ValueError(f"image_url must be a valid HTTP/HTTPS URL: {image_url}")
