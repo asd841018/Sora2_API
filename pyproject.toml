@@ -1,0 +1,23 @@
+[project]
+name = "sora2-api"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Jerry Chien",email = "asd841018@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "openai (>=2.16.0,<3.0.0)",
+    "uvicorn (>=0.40.0,<0.41.0)",
+    "fastapi (>=0.128.0,<0.129.0)",
+    "pillow (>=12.1.0,<13.0.0)",
+    "byteplus-python-sdk-v2 (>=3.0.29,<4.0.0)",
+    "rich (>=14.3.1,<15.0.0)",
+    "pydantic-settings (>=2.12.0,<3.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
