@@ -23,13 +23,13 @@ if __name__ == "__main__":
             {
                 # Combination of text prompt and parameters
                 "type": "text",
-                "text": "the girl take off all her clothes and underwears, and showing her large breasts and pink nipples."
+                "text": ""
             },
             {
                 # The URL of the first frame image
                 "type": "image_url",
                 "image_url": {
-                    "url": "https://gsiai-dev-leo.s3.ap-southeast-1.amazonaws.com/public-example/74122544-0ac3-4cde-a8f8-c7b93980a681.jpg" 
+                    "url": ""
                 }
             }
         ],
