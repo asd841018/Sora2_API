@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/v1/videos", tags=["Videos"])
 # Initialize service
 video_service = VideoGenService()
 
-@router.post("/tasks", response_model=VbenResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/tasks", status_code=status.HTTP_201_CREATED)
 async def create_video_task(request: VideoCreateRequest):
     """
     Create video generation task
@@ -47,11 +47,11 @@ async def create_video_task(request: VideoCreateRequest):
             content=content_list
         )
         
-        return VbenResponse(
-            code=0,
-            message="Video generation task created successfully",
-            data=result
-        )
+        return {
+            "code": 0,
+            "message": "Video generation task created successfully",
+            "data": result
+        }
         
     except InvalidParameterError as e:
         raise HTTPException(

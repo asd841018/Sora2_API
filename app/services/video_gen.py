@@ -3,6 +3,7 @@ import time
 import logging
 from typing import Optional, Dict, Any, List
 import httpx
+from byteplussdkarkruntime import Ark
 
 from app.config import settings
 
@@ -36,6 +37,12 @@ class VideoGenService:
             self.base_url = "https://ark.ap-southeast.bytepluses.com/api/v3"
             self.api_key = settings.BYTEDANCE_ARK_API_KEY
             self.model_id = settings.BYTEDANCE_MODEL_ID
+            self.client = Ark(
+                    # This is the default path. You can configure it based on the service location
+                    base_url=self.base_url,
+                    # Get your Key authentication from the environment variable. This is the default mode and you can modify it as required
+                    api_key=settings.BYTEDANCE_ARK_API_KEY,
+                )
             logger.info("VideoGenService initialized successfully")
         except Exception as e:
             logger.error(f"VideoGenService initialization failed: {str(e)}")
@@ -71,24 +78,27 @@ class VideoGenService:
         try:
             logger.info(f"Starting video task creation - model: {self.model_id}")
             
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"{self.base_url}/contents/generations/tasks",
-                    headers={
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {self.api_key}"
-                    },
-                    json={
-                        "model": self.model_id,
-                        "content": content
-                    }
-                )
+            # async with httpx.AsyncClient(timeout=30.0) as client:
+            #     response = await client.post(
+            #         f"{self.base_url}/contents/generations/tasks",
+            #         headers={
+            #             "Content-Type": "application/json",
+            #             "Authorization": f"Bearer {self.api_key}"
+            #         },
+            #         json={
+            #             "model": self.model_id,
+            #             "content": content
+            #         }
+            #     )
+            response = self.client.content_generation.tasks.create(
+                model=self.model_id, # Model ID
+                content=content,
+                duration=12,
+                generate_audio=False
+            )
                 
-                response.raise_for_status()
-                result = response.json()
-                
-            logger.info(f"Video task created successfully - task_id: {result.get('id', 'unknown')}")
-            return result
+            logger.info(f"Video task created successfully - task_id: {response.id}")
+            return response
             
         except httpx.HTTPStatusError as e:
             logger.error(f"API request failed with status {e.response.status_code}: {e.response.text}")
